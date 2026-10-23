@@ -117,6 +117,10 @@ label.f small{font-weight:400;color:var(--muted)}
 .cam{margin-top:12px;border-radius:14px;overflow:hidden;background:#000;position:relative;min-height:190px}
 #reader{width:100%}
 #reader video{width:100%!important;display:block}
+#camVideo{height:300px!important;object-fit:cover}
+.aim{position:absolute;left:4%;right:4%;top:50%;height:2px;background:#ff3b3b;box-shadow:0 0 8px #ff3b3b;z-index:2;pointer-events:none}
+.engine{position:absolute;left:8px;bottom:8px;z-index:3;font-size:12px;color:#fff;background:rgba(0,0,0,.5);padding:3px 8px;border-radius:8px}
+.engine:empty{display:none}
 .cammsg{position:absolute;inset:0;display:grid;place-items:center;color:#cfd6e6;text-align:center;padding:20px;font-size:15px}
 .camtools{position:absolute;right:8px;top:8px;display:flex;gap:6px;z-index:3}
 .camtools button{background:rgba(0,0,0,.55);color:#fff;border:0;border-radius:10px;padding:8px 10px;font-size:14px;font-weight:600;cursor:pointer}
@@ -191,7 +195,7 @@ label.f small{font-weight:400;color:var(--muted)}
     <label class="f">Security guard on duty
       <input class="in" id="sGuard" type="text" placeholder="Your name"></label>
     <label class="f">Order ID = last characters of barcode <small>(0 = keep full barcode)</small>
-      <input class="in" id="sLen" type="number" min="0" max="20" value="5" inputmode="numeric"></label>
+      <input class="in" id="sLen" type="number" min="0" max="20" value="0" inputmode="numeric"></label>
     <div style="margin-top:20px"><button class="primary" id="btnSave">Save and start</button></div>
     <button class="ghost" id="btnTest">Test connection</button>
     <button class="ghost" id="btnSetupBack" hidden>Back</button>
@@ -215,9 +219,9 @@ label.f small{font-weight:400;color:var(--muted)}
     <div class="sheet ruled" id="todayList"></div>
 
     <h2>Find a shipment</h2>
-    <p class="hi">Search by order ID, barcode or rider mobile.</p>
+    <p class="hi">Search by tracking number (full or last few characters) or rider mobile.</p>
     <div class="search">
-      <input class="in" id="q" placeholder="e.g. O9U2D" autocomplete="off">
+      <input class="in" id="q" placeholder="e.g. 1792758533279X4LDCAFH" autocomplete="off">
       <button id="btnFind">Find</button>
     </div>
     <div class="sheet" id="findRes" hidden></div>
@@ -252,11 +256,15 @@ label.f small{font-weight:400;color:var(--muted)}
       <div id="reader"></div>
       <div class="cammsg" id="camMsg">Starting camera…</div>
       <div class="camtools">
+        <button id="btnZoom" hidden>Zoom 1×</button>
         <button id="btnTorch" hidden>Light</button>
         <button id="btnCam">Pause</button>
       </div>
+      <div class="aim"></div>
+      <div class="engine" id="camEngine"></div>
       <div class="flash" id="flash"></div>
     </div>
+    <p class="hi" style="margin:8px 2px 0">Hold the phone 15–20 cm away with the barcode lying across the red line. Glare from plastic? Tilt the phone slightly.</p>
     <div class="manual">
       <input class="in" id="manual" placeholder="Type or use scanner gun" autocomplete="off" autocapitalize="characters" enterkeyhint="done">
       <button id="btnAdd">Add</button>
@@ -348,7 +356,7 @@ function renderSync(){
 function fillSetup(){
   const sel=$('#sStore');sel.innerHTML=STORES.map(s=>`<option>${s}</option>`).join('')+'<option value="__other">Other…</option>';
   if(cfg){
-    $('#sUrl').value=cfg.url;$('#sKey').value=cfg.key;$('#sGuard').value=cfg.guard||'';$('#sLen').value=cfg.orderLen??5;
+    $('#sUrl').value=cfg.url;$('#sKey').value=cfg.key;$('#sGuard').value=cfg.guard||'';$('#sLen').value=cfg.orderLen??0;
     if(STORES.includes(cfg.store))sel.value=cfg.store;else{sel.value='__other';$('#sStoreOther').value=cfg.store||''}
   }
   $('#sStoreOtherWrap').hidden=sel.value!=='__other';
@@ -463,13 +471,13 @@ $('#btnRiderNext').onclick=()=>{
 };
 
 /* ---------- scanning ---------- */
-function addCode(raw){
+const camSeen=new Map();   // code -> last time the camera saw it
+function addCode(raw,fromCam){
   if(!cur)return;
   const code=String(raw||'').trim().replace(/\s+/g,'').toUpperCase();
-  if(code.length<4){toast('That code is too short','bad');return}
+  if(code.length<4){if(!fromCam)toast('That code is too short','bad');return}
   const now=Date.now();
-  if(code===lastScan.code&&now-lastScan.t<2500)return;   // camera sees same label twice
-  lastScan={code,t:now};
+  if(fromCam){const t=camSeen.get(code);camSeen.set(code,now);if(t&&now-t<3000)return}  // label still in view
   if(cur.items.some(i=>i.code===code)){buzz('dup');toast('Already scanned for this rider','warn');shake(code);return}
   const prev=localBatches.find(b=>(b.codes||[]).includes(code));
   cur.items.unshift({code,orderId:orderIdOf(code),t:now,prev:prev?prev.riderName+' '+prev.in:''});
@@ -489,39 +497,70 @@ function renderScan(fresh){
       <button class="del" data-del="${esc(c)}" aria-label="Remove">×</button></div>`}).join('');
 }
 $('#scanList').addEventListener('click',e=>{const d=e.target.closest('[data-del]');if(!d)return;
-  if(!confirm('Remove this shipment?'))return;cur.items=cur.items.filter(i=>i.code!==d.dataset.del);lastScan={code:'',t:0};renderScan()});
+  if(!confirm('Remove this shipment?'))return;cur.items=cur.items.filter(i=>i.code!==d.dataset.del);camSeen.delete(d.dataset.del);renderScan()});
 $('#btnAdd').onclick=()=>{const v=$('#manual').value;$('#manual').value='';addCode(v)};
 $('#manual').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#btnAdd').click()}});
 
+let engine='',stream=null,track=null,loopT=null,detector=null,zoomLv=1;
+async function nativeOK(){try{if(!('BarcodeDetector'in window))return false;const f=await BarcodeDetector.getSupportedFormats();return f.includes('code_128')}catch(e){return false}}
 async function startCam(){
-  const msg=$('#camMsg');
   if(scanning)return;
-  if(!window.Html5Qrcode){msg.textContent='Camera scanner did not load. Type codes or use a scanner gun below.';return}
-  msg.hidden=false;msg.textContent='Starting camera…';
+  const msg=$('#camMsg');msg.hidden=false;msg.textContent='Starting camera…';
   try{
-    const F=Html5QrcodeSupportedFormats;
-    if(!scanner)scanner=new Html5Qrcode('reader',{verbose:false,
-      formatsToSupport:[F.CODE_128,F.CODE_39,F.CODE_93,F.EAN_13,F.EAN_8,F.ITF,F.UPC_A,F.CODABAR,F.QR_CODE,F.DATA_MATRIX],
-      experimentalFeatures:{useBarCodeDetectorIfSupported:true}});
-    await scanner.start({facingMode:'environment'},
-      {fps:12,disableFlip:true,qrbox:(w,h)=>({width:Math.max(120,Math.floor(w*.92)),height:Math.max(80,Math.floor(Math.min(w,h)*.42))})},
-      txt=>addCode(txt),()=>{});
+    if(await nativeOK())await startNative();else await startZxing();
     scanning=true;msg.hidden=true;$('#btnCam').textContent='Pause';
-    try{const caps=scanner.getRunningTrackCapabilities();$('#btnTorch').hidden=!(caps&&caps.torch)}catch(e){}
+    $('#camEngine').textContent=engine==='native'?'Fast scanner':'Standard scanner';
+    setupTools();
     try{if('wakeLock'in navigator)wake=await navigator.wakeLock.request('screen')}catch(e){}
   }catch(e){
     msg.hidden=false;
-    msg.textContent='Camera not available. Allow camera permission in the browser, or type codes below.';
+    msg.textContent=e&&e.message==='nolib'?'Camera scanner did not load. Type codes or use a scanner gun below.'
+      :e&&e.name==='NotAllowedError'?'Camera permission is blocked. Tap the lock icon in the address bar and allow Camera.'
+      :'Camera not available. Type codes or use a scanner gun below.';
   }
 }
+/* Android Chrome: built-in barcode engine, full HD frame, reads several labels at once */
+async function startNative(){
+  engine='native';
+  stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});
+  track=stream.getVideoTracks()[0];
+  try{await track.applyConstraints({advanced:[{focusMode:'continuous'}]})}catch(e){}
+  const v=document.createElement('video');v.id='camVideo';v.setAttribute('playsinline','');v.muted=true;v.srcObject=stream;
+  $('#reader').innerHTML='';$('#reader').appendChild(v);await v.play();
+  detector=new BarcodeDetector({formats:['code_128','code_39','code_93','ean_13','itf','qr_code']});
+  let busy=false;
+  const loop=async()=>{
+    if(!stream)return;
+    if(!busy&&v.readyState>=2){busy=true;try{(await detector.detect(v)).forEach(r=>addCode(r.rawValue,true))}catch(e){}busy=false}
+    loopT=setTimeout(loop,80);
+  };
+  loop();
+}
+/* iPhone / others: ZXing, high resolution, Code 128 only for speed */
+async function startZxing(){
+  if(!window.Html5Qrcode)throw new Error('nolib');
+  engine='zxing';
+  const F=Html5QrcodeSupportedFormats;
+  if(!scanner)scanner=new Html5Qrcode('reader',{verbose:false,formatsToSupport:[F.CODE_128,F.QR_CODE]});
+  await scanner.start({facingMode:'environment'},{fps:15,disableFlip:true,
+    videoConstraints:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}},
+    qrbox:(w,h)=>({width:Math.floor(w*.96),height:Math.max(80,Math.floor(h*.45))})},
+    t=>addCode(t,true),()=>{});
+}
+function caps(){try{return(engine==='native'?track.getCapabilities():scanner.getRunningTrackCapabilities())||{}}catch(e){return{}}}
+function applyC(c){return engine==='native'?track.applyConstraints({advanced:[c]}):scanner.applyVideoConstraints({advanced:[c]})}
+function setupTools(){const c=caps();$('#btnTorch').hidden=!c.torch;$('#btnZoom').hidden=!(c.zoom&&c.zoom.max>=1.5);zoomLv=1;$('#btnZoom').textContent='Zoom 1×'}
 async function stopCam(){
-  if(scanner&&scanning){try{await scanner.stop()}catch(e){}}
+  if(engine==='native'){clearTimeout(loopT);if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}track=null;$('#reader').innerHTML=''}
+  else if(scanner&&scanning){try{await scanner.stop()}catch(e){}}
   scanning=false;torchOn=false;$('#btnCam').textContent='Resume';
   const m=$('#camMsg');m.hidden=false;m.textContent='Camera paused';
   try{if(wake){await wake.release();wake=null}}catch(e){}
 }
 $('#btnCam').onclick=()=>scanning?stopCam():startCam();
-$('#btnTorch').onclick=async()=>{try{torchOn=!torchOn;await scanner.applyVideoConstraints({advanced:[{torch:torchOn}]})}catch(e){toast('Light not supported on this phone','warn')}};
+$('#btnTorch').onclick=async()=>{try{torchOn=!torchOn;await applyC({torch:torchOn})}catch(e){toast('Light not supported on this phone','warn')}};
+$('#btnZoom').onclick=async()=>{const c=caps();if(!c.zoom)return;const lv=[1,1.5,2,2.5].filter(z=>z<=c.zoom.max);zoomLv=lv[(lv.indexOf(zoomLv)+1)%lv.length];
+  try{await applyC({zoom:Math.max(zoomLv,c.zoom.min||1)});$('#btnZoom').textContent='Zoom '+zoomLv+'×'}catch(e){}};
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&scanning)stopCam()});
 
 $('#btnScanCancel').onclick=async()=>{if(cur.items.length&&!confirm(`Discard ${cur.items.length} scanned shipment(s)?`))return;await stopCam();cur=null;goHome()};
