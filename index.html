@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1e3a8a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Gate Register</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+:root{
+  --paper:#fbfcfe; --surface:#ffffff; --ink:#1e3a8a; --text:#16203a; --muted:#5d6782;
+  --rule:#d6def0; --margin:#d64545; --ok:#14824a; --ok-soft:#e3f4ea; --warn:#a35b00; --warn-soft:#fff1d6;
+  --bad:#c02d2d; --bad-soft:#fde4e4; --hl:#fff36b;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --display:"Barlow Condensed","Barlow",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0e1424; --surface:#151d33; --ink:#9db6ff; --text:#e6ebf7; --muted:#97a2bf;
+    --rule:#26304b; --margin:#ff6b6b; --ok:#46c983; --ok-soft:#0f2b1f; --warn:#ffb547; --warn-soft:#33260c;
+    --bad:#ff7a7a; --bad-soft:#3a1717; --hl:#5c5410; color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;min-height:100%;background:var(--paper);color:var(--text);font:16px/1.45 var(--body);-webkit-tap-highlight-color:transparent}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.wrap{max-width:560px;margin:0 auto;padding:0 16px 120px}
+
+/* header */
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--ink);color:#fff}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--ink)}
+@media (prefers-color-scheme:dark){header,body::before{background:#1a2650}}
+.hbar{max-width:560px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px}
+.hbar h1{font:700 22px/1 var(--display);margin:0;letter-spacing:.3px}
+.hbar .sub{font-size:13px;opacity:.8}
+.hbar .grow{flex:1;min-width:0}
+.clock{font:600 22px/1 var(--display);font-variant-numeric:tabular-nums}
+.iconbtn{background:rgba(255,255,255,.12);border:0;border-radius:10px;width:40px;height:40px;display:grid;place-items:center;cursor:pointer;color:#fff}
+.sync{display:inline-flex;align-items:center;gap:6px;font-size:12px;opacity:.9}
+.dot{width:8px;height:8px;border-radius:50%;background:#5ee39a}
+.dot.off{background:#ffb547}.dot.err{background:#ff7a7a}
+
+/* register page look */
+.sheet{background:var(--surface);border:1px solid var(--rule);border-radius:14px;margin-top:16px;position:relative;overflow:hidden}
+.sheet.ruled{background-image:repeating-linear-gradient(to bottom,transparent 0 51px,var(--rule) 51px 52px)}
+.sheet.ruled::before{content:"";position:absolute;top:0;bottom:0;left:44px;width:2px;background:var(--margin);opacity:.55}
+.pad{padding:16px}
+
+h2{font:700 26px/1.1 var(--display);margin:22px 0 6px;color:var(--text)}
+.lead{color:var(--muted);margin:0 0 8px}
+.hi{color:var(--muted);font-size:13px}
+
+/* big action */
+.newbtn{display:flex;align-items:center;gap:16px;width:100%;margin-top:16px;padding:20px;border:0;border-radius:16px;background:var(--ink);color:#fff;cursor:pointer;text-align:left}
+@media (prefers-color-scheme:dark){.newbtn{background:#2d47a8}}
+.newbtn .plus{width:54px;height:54px;border-radius:14px;background:rgba(255,255,255,.16);display:grid;place-items:center;flex:none}
+.newbtn b{display:block;font:700 26px/1 var(--display)}
+.newbtn span{opacity:.85;font-size:14px}
+
+.tally{display:grid;grid-template-columns:repeat(3,1fr);margin-top:16px;border:1px solid var(--rule);border-radius:14px;background:var(--surface)}
+.tally div{padding:12px 14px;border-left:1px solid var(--rule)}
+.tally div:first-child{border-left:0}
+.tally b{display:block;font:700 30px/1 var(--display);font-variant-numeric:tabular-nums}
+.tally span{font-size:13px;color:var(--muted)}
+
+/* rows like a register line */
+.row{display:grid;grid-template-columns:44px 1fr auto;align-items:center;min-height:52px;padding:6px 12px 6px 0;gap:10px}
+.row .n{text-align:center;font:600 14px var(--display);color:var(--muted)}
+.row .who{min-width:0}
+.row .who b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .who small{color:var(--muted);font-variant-numeric:tabular-nums}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:99px;margin-left:6px;vertical-align:1px}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.bad{background:var(--bad-soft);color:var(--bad)}
+.outbtn{border:2px solid var(--ink);background:transparent;color:var(--ink);border-radius:10px;padding:8px 12px;font-weight:700;cursor:pointer;white-space:nowrap}
+.outdone{font:600 15px var(--display);color:var(--muted);text-align:right;line-height:1.1}
+.outdone small{display:block;font:400 12px var(--body)}
+.empty{padding:22px 16px 22px 56px;color:var(--muted)}
+
+/* forms */
+label.f{display:block;margin-top:14px;font-weight:600}
+label.f small{font-weight:400;color:var(--muted)}
+.in{width:100%;margin-top:6px;padding:14px;border:2px solid var(--rule);border-radius:12px;background:var(--surface);font-size:19px}
+.in:focus{border-color:var(--ink);outline:none}
+.in.big{font:600 28px/1 var(--display);letter-spacing:1.5px;font-variant-numeric:tabular-nums}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip{border:1px solid var(--rule);background:var(--surface);border-radius:99px;padding:8px 12px;cursor:pointer;font-size:14px}
+.chip b{font-weight:600}
+.known{margin-top:8px;padding:10px 12px;border-radius:10px;background:var(--ok-soft);color:var(--ok);font-weight:600;display:none}
+
+.primary{width:100%;padding:17px;border:0;border-radius:14px;background:var(--ink);color:#fff;font:700 22px/1 var(--display);letter-spacing:.3px;cursor:pointer}
+@media (prefers-color-scheme:dark){.primary{background:#2d47a8}}
+.primary:disabled{opacity:.4;cursor:not-allowed}
+.ghost{width:100%;padding:14px;border:2px solid var(--rule);border-radius:14px;background:transparent;font-weight:600;cursor:pointer;margin-top:10px}
+.bar{position:fixed;left:0;right:0;bottom:0;z-index:15;background:var(--paper);border-top:1px solid var(--rule);padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px))}
+.bar .inner{max-width:528px;margin:0 auto;display:flex;gap:10px}
+.bar .inner .ghost{margin:0;width:auto;padding:14px 18px}
+
+/* scan */
+.riderline{display:flex;align-items:center;gap:12px;margin-top:14px}
+.riderline .grow{flex:1;min-width:0}
+.riderline b{font:700 24px/1.05 var(--display);display:block}
+.riderline small{color:var(--muted);font-variant-numeric:tabular-nums}
+.counter{text-align:right}
+.counter b{font:700 52px/0.9 var(--display);color:var(--ink);font-variant-numeric:tabular-nums;display:block}
+.counter small{color:var(--muted);font-size:13px}
+.cam{margin-top:12px;border-radius:14px;overflow:hidden;background:#000;position:relative;min-height:190px}
+#reader{width:100%}
+#reader video{width:100%!important;display:block}
+.cammsg{position:absolute;inset:0;display:grid;place-items:center;color:#cfd6e6;text-align:center;padding:20px;font-size:15px}
+.camtools{position:absolute;right:8px;top:8px;display:flex;gap:6px;z-index:3}
+.camtools button{background:rgba(0,0,0,.55);color:#fff;border:0;border-radius:10px;padding:8px 10px;font-size:14px;font-weight:600;cursor:pointer}
+.flash{position:absolute;inset:0;pointer-events:none;border:6px solid transparent;border-radius:14px;z-index:2}
+.flash.ok{animation:fok .45s}
+.flash.dup{animation:fdup .6s}
+@keyframes fok{from{border-color:#3ee08a}to{border-color:transparent}}
+@keyframes fdup{from{border-color:#ffb547}to{border-color:transparent}}
+.manual{display:flex;gap:8px;margin-top:12px}
+.manual .in{margin:0;font:600 17px var(--mono);letter-spacing:.3px;text-transform:uppercase}
+.manual .in::placeholder{text-transform:none;font-family:var(--body);letter-spacing:0}
+.manual button{flex:none;border:0;border-radius:12px;background:var(--ink);color:#fff;font-weight:700;padding:0 18px;cursor:pointer}
+@media (prefers-color-scheme:dark){.manual button{background:#2d47a8}}
+.code{font:600 14.5px var(--mono);letter-spacing:.2px;word-break:break-all}
+.code .oid{background:var(--hl);padding:0 3px;border-radius:3px}
+.del{border:0;background:transparent;color:var(--muted);width:40px;height:40px;border-radius:10px;cursor:pointer;font-size:22px}
+.row.new{animation:rowin .5s}
+@keyframes rowin{from{background:var(--ok-soft)}to{background:transparent}}
+.row.shake{animation:shake .4s}
+@keyframes shake{0%,100%{transform:none}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+
+/* done */
+.done{text-align:center;padding:40px 10px 10px}
+.done .tick{width:96px;height:96px;margin:0 auto;border-radius:50%;background:var(--ok-soft);color:var(--ok);display:grid;place-items:center}
+.done h2{font-size:34px;margin-top:18px}
+.notice{margin-top:14px;padding:12px 14px;border-radius:12px;text-align:left;font-size:15px}
+.notice.warn{background:var(--warn-soft);color:var(--warn)}
+.notice.bad{background:var(--bad-soft);color:var(--bad)}
+
+/* search */
+.search{display:flex;gap:8px;margin-top:10px}
+.search .in{margin:0;font-size:16px;padding:12px}
+.search button{border:2px solid var(--ink);background:transparent;color:var(--ink);border-radius:12px;padding:0 16px;font-weight:700;cursor:pointer}
+.res{padding:10px 14px;border-top:1px solid var(--rule);font-size:14px}
+.res:first-child{border-top:0}
+
+.toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%) translateY(20px);opacity:0;z-index:50;padding:12px 18px;border-radius:12px;background:#16203a;color:#fff;font-weight:600;transition:.2s;max-width:90vw;text-align:center;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%)}
+.toast.warn{background:#a35b00}.toast.bad{background:#c02d2d}.toast.ok{background:#14824a}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="hbar">
+    <div class="grow">
+      <h1 id="hStore">Gate Register</h1>
+      <div class="sub"><span id="hGuard">Omni inward</span> &nbsp; <span class="sync"><i class="dot" id="syncDot"></i><span id="syncTxt">Online</span></span></div>
+    </div>
+    <div class="clock" id="clock">--:--</div>
+    <button class="iconbtn" id="btnSettings" aria-label="Settings">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- SETUP / SETTINGS -->
+  <section data-view="setup" hidden>
+    <h2>Set up this phone</h2>
+    <p class="lead">One-time setup. Ask your store manager for the link and PIN.</p>
+    <label class="f">Google Sheet link <small>(Apps Script web app URL)</small>
+      <input class="in" id="sUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off"></label>
+    <label class="f">PIN
+      <input class="in" id="sKey" type="password" autocomplete="off"></label>
+    <label class="f">Store
+      <select class="in" id="sStore"></select></label>
+    <label class="f" id="sStoreOtherWrap" hidden>Store name
+      <input class="in" id="sStoreOther" type="text"></label>
+    <label class="f">Security guard on duty
+      <input class="in" id="sGuard" type="text" placeholder="Your name"></label>
+    <label class="f">Order ID = last characters of barcode <small>(0 = keep full barcode)</small>
+      <input class="in" id="sLen" type="number" min="0" max="20" value="5" inputmode="numeric"></label>
+    <div style="margin-top:20px"><button class="primary" id="btnSave">Save and start</button></div>
+    <button class="ghost" id="btnTest">Test connection</button>
+    <button class="ghost" id="btnSetupBack" hidden>Back</button>
+  </section>
+
+  <!-- HOME -->
+  <section data-view="home" hidden>
+    <button class="newbtn" id="btnNew">
+      <span class="plus"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M12 5v14M5 12h14"/></svg></span>
+      <span><b>New rider entry</b><span>Rider aaya? Tap here · नई एंट्री</span></span>
+    </button>
+
+    <div class="tally">
+      <div><b id="tRiders">0</b><span>Riders today</span></div>
+      <div><b id="tShip">0</b><span>Shipments</span></div>
+      <div><b id="tInside">0</b><span>Still inside</span></div>
+    </div>
+
+    <h2>Today’s register</h2>
+    <p class="hi" id="todayDate"></p>
+    <div class="sheet ruled" id="todayList"></div>
+
+    <h2>Find a shipment</h2>
+    <p class="hi">Search by order ID, barcode or rider mobile.</p>
+    <div class="search">
+      <input class="in" id="q" placeholder="e.g. O9U2D" autocomplete="off">
+      <button id="btnFind">Find</button>
+    </div>
+    <div class="sheet" id="findRes" hidden></div>
+  </section>
+
+  <!-- RIDER -->
+  <section data-view="rider" hidden>
+    <h2>Rider details</h2>
+    <p class="lead">Enter the mobile number first. Known riders fill in automatically.</p>
+    <label class="f">Mobile number
+      <input class="in big" id="rMob" type="tel" inputmode="numeric" maxlength="10" placeholder="98XXXXXXXX" autocomplete="off"></label>
+    <div class="known" id="rKnown"></div>
+    <label class="f">Rider name
+      <input class="in" id="rName" type="text" placeholder="Full name" autocomplete="off" autocapitalize="words"></label>
+    <div id="recentWrap">
+      <p class="hi" style="margin:16px 0 0">Recent riders</p>
+      <div class="chips" id="recent"></div>
+    </div>
+    <div class="bar"><div class="inner">
+      <button class="ghost" id="btnRiderCancel">Cancel</button>
+      <button class="primary" id="btnRiderNext" disabled>Start scanning</button>
+    </div></div>
+  </section>
+
+  <!-- SCAN -->
+  <section data-view="scan" hidden>
+    <div class="riderline">
+      <div class="grow"><b id="scName">—</b><small id="scMeta"></small></div>
+      <div class="counter"><b id="scCount">0</b><small>scanned</small></div>
+    </div>
+    <div class="cam">
+      <div id="reader"></div>
+      <div class="cammsg" id="camMsg">Starting camera…</div>
+      <div class="camtools">
+        <button id="btnTorch" hidden>Light</button>
+        <button id="btnCam">Pause</button>
+      </div>
+      <div class="flash" id="flash"></div>
+    </div>
+    <div class="manual">
+      <input class="in" id="manual" placeholder="Type or use scanner gun" autocomplete="off" autocapitalize="characters" enterkeyhint="done">
+      <button id="btnAdd">Add</button>
+    </div>
+    <div class="sheet ruled" id="scanList"></div>
+    <div class="bar"><div class="inner">
+      <button class="ghost" id="btnScanCancel">Cancel</button>
+      <button class="primary" id="btnSubmit" disabled>Save 0 shipments</button>
+    </div></div>
+  </section>
+
+  <!-- DONE -->
+  <section data-view="done" hidden>
+    <div class="done">
+      <div class="tick"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+      <h2 id="dTitle">Saved</h2>
+      <p class="lead" id="dSub"></p>
+      <div id="dNotes"></div>
+    </div>
+    <div style="margin-top:24px"><button class="primary" id="btnNext">Next rider</button></div>
+    <button class="ghost" id="btnHome">Back to register</button>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+"use strict";
+const $=s=>document.querySelector(s);
+const LS={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const STORES=['Malad','Ghatkopar','Parel','Thane','Vashi'];
+
+let cfg=LS.get('gr_cfg',null);
+let riders=LS.get('gr_riders',[]);          // [{m,n,v,last}]
+let queue=LS.get('gr_queue',[]);            // pending API calls
+let localBatches=LS.get('gr_batches',[]);   // batches saved from this phone
+let outs=LS.get('gr_outs',{});              // batchId -> out time marked on this phone
+let serverBatches=[];
+let cur=null, scanner=null, scanning=false, torchOn=false, wake=null, lastScan={code:'',t:0}, netState='ok';
+
+/* ---------- utils ---------- */
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const dStr=(d=new Date())=>d.toLocaleDateString('en-GB',{timeZone:'Asia/Kolkata'});
+const tStr=(d=new Date())=>d.toLocaleTimeString('en-GB',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hour12:false});
+const uid=()=>'B'+Date.now().toString(36).toUpperCase()+Math.random().toString(36).slice(2,5).toUpperCase();
+const orderIdOf=code=>{const n=+cfg.orderLen||0;return n>0&&code.length>n?code.slice(-n):code};
+function save(){LS.set('gr_riders',riders);LS.set('gr_queue',queue);LS.set('gr_batches',localBatches);LS.set('gr_outs',outs)}
+function show(v){document.querySelectorAll('[data-view]').forEach(s=>s.hidden=s.dataset.view!==v);window.scrollTo(0,0)}
+let toastT;function toast(msg,kind){const t=$('#toast');t.textContent=msg;t.className='toast show '+(kind||'');clearTimeout(toastT);toastT=setTimeout(()=>t.className='toast',2200)}
+let actx;function buzz(kind){
+  try{actx=actx||new(window.AudioContext||window.webkitAudioContext)();const o=actx.createOscillator(),g=actx.createGain();
+    o.type='square';o.frequency.value=kind==='ok'?1300:320;g.gain.value=.07;o.connect(g);g.connect(actx.destination);o.start();o.stop(actx.currentTime+(kind==='ok'?.08:.32));}catch(e){}
+  if(navigator.vibrate)navigator.vibrate(kind==='ok'?45:[90,60,90]);
+  const f=$('#flash');f.className='flash';void f.offsetWidth;f.className='flash '+(kind==='ok'?'ok':'dup');
+}
+
+/* ---------- API ---------- */
+async function api(payload,timeout){
+  const ctl=new AbortController();const tm=setTimeout(()=>ctl.abort(),timeout||20000);
+  try{
+    const r=await fetch(cfg.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({},payload,{key:cfg.key})),signal:ctl.signal});
+    const j=await r.json();
+    if(!j.ok){const e=new Error(j.error||'Server error');e.server=true;throw e}
+    netState='ok';return j;
+  }catch(e){netState=e.server?'err':'off';throw e}
+  finally{clearTimeout(tm);renderSync()}
+}
+let flushing=false;
+async function flush(){
+  if(flushing||!queue.length||!cfg)return;flushing=true;
+  try{
+    while(queue.length){
+      const item=queue[0];await api(item);
+      if(item.action==='submit'){const b=localBatches.find(x=>x.batchId===item.batchId);if(b)b.synced=true}
+      queue.shift();save();
+    }
+  }catch(e){}finally{flushing=false;renderSync();renderHome()}
+}
+function renderSync(){
+  const dot=$('#syncDot'),txt=$('#syncTxt');
+  if(queue.length){dot.className='dot off';txt.textContent=queue.length+' waiting to sync'}
+  else if(netState==='off'){dot.className='dot off';txt.textContent='Offline'}
+  else if(netState==='err'){dot.className='dot err';txt.textContent='Check PIN / link'}
+  else{dot.className='dot';txt.textContent='Synced'}
+}
+
+/* ---------- setup ---------- */
+function fillSetup(){
+  const sel=$('#sStore');sel.innerHTML=STORES.map(s=>`<option>${s}</option>`).join('')+'<option value="__other">Other…</option>';
+  if(cfg){
+    $('#sUrl').value=cfg.url;$('#sKey').value=cfg.key;$('#sGuard').value=cfg.guard||'';$('#sLen').value=cfg.orderLen??5;
+    if(STORES.includes(cfg.store))sel.value=cfg.store;else{sel.value='__other';$('#sStoreOther').value=cfg.store||''}
+  }
+  $('#sStoreOtherWrap').hidden=sel.value!=='__other';
+  $('#btnSetupBack').hidden=!cfg;
+}
+$('#sStore').onchange=()=>$('#sStoreOtherWrap').hidden=$('#sStore').value!=='__other';
+function readSetup(){
+  const store=$('#sStore').value==='__other'?$('#sStoreOther').value.trim():$('#sStore').value;
+  return{url:$('#sUrl').value.trim(),key:$('#sKey').value.trim(),store,guard:$('#sGuard').value.trim(),orderLen:Math.max(0,parseInt($('#sLen').value||'0',10))};
+}
+$('#btnTest').onclick=async()=>{
+  const c=readSetup();if(!/^https:\/\/script\.google(usercontent)?\.com\//.test(c.url))return toast('Paste the Apps Script /exec link','bad');
+  const old=cfg;cfg=c;
+  try{await api({action:'ping'});toast('Connected to sheet','ok')}catch(e){toast(e.server?e.message:'Could not reach the sheet','bad')}
+  cfg=old;
+};
+$('#btnSave').onclick=()=>{
+  const c=readSetup();
+  if(!/^https:\/\/script\.google(usercontent)?\.com\//.test(c.url))return toast('Paste the Apps Script /exec link','bad');
+  if(!c.key)return toast('Enter the PIN','bad');
+  if(!c.store)return toast('Choose the store','bad');
+  if(!c.guard)return toast('Enter the guard name','bad');
+  cfg=c;LS.set('gr_cfg',cfg);applyHeader();goHome();loadRiders();flush();
+};
+$('#btnSetupBack').onclick=goHome;
+$('#btnSettings').onclick=async()=>{if(cur&&!confirm('Leave the current entry?'))return;await stopCam();cur=null;fillSetup();show('setup')};
+function applyHeader(){$('#hStore').textContent=cfg?cfg.store+' gate':'Gate Register';$('#hGuard').textContent=cfg?cfg.guard:'Omni inward'}
+
+/* ---------- home ---------- */
+function merged(){
+  const today=dStr(),map=new Map();
+  serverBatches.forEach(b=>map.set(b.batchId,Object.assign({},b)));
+  localBatches.filter(b=>b.date===today).forEach(b=>{if(!map.has(b.batchId))map.set(b.batchId,Object.assign({},b))});
+  const list=[...map.values()];
+  list.forEach(b=>{if(!b.outTime&&outs[b.batchId])b.outTime=outs[b.batchId]});
+  return list.sort((a,b)=>a.in<b.in?1:a.in>b.in?-1:0);
+}
+function renderHome(){
+  if(!cfg)return;
+  const list=merged();
+  $('#tRiders').textContent=list.length;
+  $('#tShip').textContent=list.reduce((s,b)=>s+(+b.count||0),0);
+  $('#tInside').textContent=list.filter(b=>!b.outTime).length;
+  $('#todayDate').textContent=new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',timeZone:'Asia/Kolkata'});
+  const el=$('#todayList');
+  if(!list.length){el.innerHTML='<div class="empty">No riders yet today. Tap “New rider entry” when one arrives.</div>';return}
+  el.innerHTML=list.map((b,i)=>`<div class="row">
+    <div class="n">${list.length-i}</div>
+    <div class="who"><b>${esc(b.riderName)}</b>
+      <small>${esc(b.riderMobile)} · in ${esc(b.in)}</small>
+      <div><span class="pill ok" style="margin:0">${b.count} shipment${b.count>1?'s':''}</span>${b.repeats?`<span class="pill bad">${b.repeats} repeat</span>`:''}${b.synced===false?'<span class="pill warn">not synced</span>':''}</div></div>
+    ${b.outTime?`<div class="outdone">${esc(b.outTime)}<small>out</small></div>`:`<button class="outbtn" data-out="${esc(b.batchId)}">Mark out</button>`}
+  </div>`).join('');
+}
+$('#todayList').addEventListener('click',e=>{const b=e.target.closest('[data-out]');if(b)markOut(b.dataset.out)});
+async function markOut(id){
+  const b=merged().find(x=>x.batchId===id);
+  if(!confirm(`Mark ${b?b.riderName:'rider'} as out now?`))return;
+  outs[id]=tStr();save();renderHome();
+  const p={action:'out',batchId:id,outTime:Date.now()};
+  try{if(queue.length)throw 0;await api(p);toast('Marked out','ok')}catch(e){queue.push(p);save();renderSync();toast('Saved on phone, will sync','warn')}
+}
+async function loadToday(){try{const j=await api({action:'today',store:cfg.store});serverBatches=j.batches||[]}catch(e){}renderHome()}
+async function loadRiders(){try{const j=await api({action:'riders'});const m=new Map(riders.map(r=>[r.m,r]));(j.riders||[]).forEach(r=>m.set(r.m,Object.assign(m.get(r.m)||{},r)));riders=[...m.values()];save()}catch(e){}}
+function goHome(){show('home');renderHome();renderSync();if(!queue.length)loadToday()}
+
+$('#btnFind').onclick=async()=>{
+  const q=$('#q').value.trim();if(q.length<3)return toast('Type at least 3 characters','warn');
+  const box=$('#findRes');box.hidden=false;box.innerHTML='<div class="res">Searching…</div>';
+  try{
+    const j=await api({action:'find',q});
+    box.innerHTML=j.rows.length?j.rows.map(r=>`<div class="res"><div class="code">${esc(r.code)}</div>
+      <div><b>${esc(r.rider)}</b> · ${esc(r.mobile)}</div>
+      <div class="hi">${esc(r.store)} · ${esc(r.date)} · in ${esc(r.in)}${r.out?' · out '+esc(r.out):''}</div>
+      ${r.flag?`<div class="pill bad" style="margin:4px 0 0">${esc(r.flag)}</div>`:''}</div>`).join(''):'<div class="res">No shipment matches that.</div>';
+  }catch(e){box.innerHTML='<div class="res">Search needs internet. Try again when online.</div>'}
+};
+$('#q').addEventListener('keydown',e=>{if(e.key==='Enter')$('#btnFind').click()});
+
+/* ---------- rider step ---------- */
+$('#btnNew').onclick=()=>{
+  cur={batchId:uid(),mobile:'',name:'',inTime:Date.now(),items:[]};
+  $('#rMob').value='';$('#rName').value='';$('#rKnown').style.display='none';
+  const rec=riders.slice().sort((a,b)=>String(b.last||'').localeCompare(String(a.last||''))).slice(0,8);
+  $('#recentWrap').hidden=!rec.length;
+  $('#recent').innerHTML=rec.map(r=>`<button class="chip" data-m="${esc(r.m)}"><b>${esc(r.n)}</b> ${esc(r.m.slice(-4))}</button>`).join('');
+  riderValid();show('rider');setTimeout(()=>$('#rMob').focus(),60);
+};
+$('#recent').addEventListener('click',e=>{const c=e.target.closest('[data-m]');if(!c)return;$('#rMob').value=c.dataset.m;onMob();$('#btnRiderNext').focus()});
+function onMob(){
+  const v=$('#rMob').value.replace(/\D/g,'').slice(0,10);$('#rMob').value=v;
+  const k=$('#rKnown');
+  if(v.length===10){
+    const r=riders.find(x=>x.m===v);
+    if(r){$('#rName').value=r.n;k.textContent=`Known rider · ${r.v||1} visit${(r.v||1)>1?'s':''}`;k.style.display='block'}
+    else{k.style.display='none';$('#rName').focus()}
+  }else k.style.display='none';
+  riderValid();
+}
+$('#rMob').addEventListener('input',onMob);
+$('#rName').addEventListener('input',riderValid);
+$('#rName').addEventListener('keydown',e=>{if(e.key==='Enter'&&!$('#btnRiderNext').disabled)$('#btnRiderNext').click()});
+function riderValid(){$('#btnRiderNext').disabled=!(/^\d{10}$/.test($('#rMob').value)&&$('#rName').value.trim().length>=2)}
+$('#btnRiderCancel').onclick=()=>{cur=null;goHome()};
+$('#btnRiderNext').onclick=()=>{
+  cur.mobile=$('#rMob').value;cur.name=$('#rName').value.trim().replace(/\s+/g,' ');
+  if(!/^[6-9]/.test(cur.mobile)&&!confirm('This mobile number looks unusual. Continue?'))return;
+  const r=riders.find(x=>x.m===cur.mobile);
+  if(r)r.n=cur.name;else riders.push({m:cur.mobile,n:cur.name,v:0,last:''});save();
+  $('#scName').textContent=cur.name;$('#scMeta').textContent=cur.mobile+' · in '+tStr(new Date(cur.inTime));
+  renderScan();show('scan');startCam();
+};
+
+/* ---------- scanning ---------- */
+function addCode(raw){
+  if(!cur)return;
+  const code=String(raw||'').trim().replace(/\s+/g,'').toUpperCase();
+  if(code.length<4){toast('That code is too short','bad');return}
+  const now=Date.now();
+  if(code===lastScan.code&&now-lastScan.t<2500)return;   // camera sees same label twice
+  lastScan={code,t:now};
+  if(cur.items.some(i=>i.code===code)){buzz('dup');toast('Already scanned for this rider','warn');shake(code);return}
+  const prev=localBatches.find(b=>(b.codes||[]).includes(code));
+  cur.items.unshift({code,orderId:orderIdOf(code),t:now,prev:prev?prev.riderName+' '+prev.in:''});
+  buzz('ok');renderScan(true);
+}
+function shake(code){const el=document.querySelector(`[data-code="${CSS.escape(code)}"]`);if(el){el.classList.remove('shake');void el.offsetWidth;el.classList.add('shake')}}
+function renderScan(fresh){
+  const n=cur.items.length;$('#scCount').textContent=n;
+  const b=$('#btnSubmit');b.disabled=!n;b.textContent=n?`Save ${n} shipment${n>1?'s':''}`:'Scan a shipment';
+  const el=$('#scanList');
+  if(!n){el.innerHTML='<div class="empty">Point the camera at the barcode on each shipment label.</div>';return}
+  el.innerHTML=cur.items.map((it,i)=>{
+    const c=it.code,o=it.orderId,hl=o!==c&&c.endsWith(o)?esc(c.slice(0,-o.length))+`<span class="oid">${esc(o)}</span>`:esc(c);
+    return `<div class="row${fresh&&i===0?' new':''}" data-code="${esc(c)}">
+      <div class="n">${n-i}</div>
+      <div class="who"><div class="code">${hl}</div>${it.prev?`<small class="pill warn" style="margin:2px 0 0">Seen earlier · ${esc(it.prev)}</small>`:''}</div>
+      <button class="del" data-del="${esc(c)}" aria-label="Remove">×</button></div>`}).join('');
+}
+$('#scanList').addEventListener('click',e=>{const d=e.target.closest('[data-del]');if(!d)return;
+  if(!confirm('Remove this shipment?'))return;cur.items=cur.items.filter(i=>i.code!==d.dataset.del);lastScan={code:'',t:0};renderScan()});
+$('#btnAdd').onclick=()=>{const v=$('#manual').value;$('#manual').value='';addCode(v)};
+$('#manual').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#btnAdd').click()}});
+
+async function startCam(){
+  const msg=$('#camMsg');
+  if(scanning)return;
+  if(!window.Html5Qrcode){msg.textContent='Camera scanner did not load. Type codes or use a scanner gun below.';return}
+  msg.hidden=false;msg.textContent='Starting camera…';
+  try{
+    const F=Html5QrcodeSupportedFormats;
+    if(!scanner)scanner=new Html5Qrcode('reader',{verbose:false,
+      formatsToSupport:[F.CODE_128,F.CODE_39,F.CODE_93,F.EAN_13,F.EAN_8,F.ITF,F.UPC_A,F.CODABAR,F.QR_CODE,F.DATA_MATRIX],
+      experimentalFeatures:{useBarCodeDetectorIfSupported:true}});
+    await scanner.start({facingMode:'environment'},
+      {fps:12,disableFlip:true,qrbox:(w,h)=>({width:Math.max(120,Math.floor(w*.92)),height:Math.max(80,Math.floor(Math.min(w,h)*.42))})},
+      txt=>addCode(txt),()=>{});
+    scanning=true;msg.hidden=true;$('#btnCam').textContent='Pause';
+    try{const caps=scanner.getRunningTrackCapabilities();$('#btnTorch').hidden=!(caps&&caps.torch)}catch(e){}
+    try{if('wakeLock'in navigator)wake=await navigator.wakeLock.request('screen')}catch(e){}
+  }catch(e){
+    msg.hidden=false;
+    msg.textContent='Camera not available. Allow camera permission in the browser, or type codes below.';
+  }
+}
+async function stopCam(){
+  if(scanner&&scanning){try{await scanner.stop()}catch(e){}}
+  scanning=false;torchOn=false;$('#btnCam').textContent='Resume';
+  const m=$('#camMsg');m.hidden=false;m.textContent='Camera paused';
+  try{if(wake){await wake.release();wake=null}}catch(e){}
+}
+$('#btnCam').onclick=()=>scanning?stopCam():startCam();
+$('#btnTorch').onclick=async()=>{try{torchOn=!torchOn;await scanner.applyVideoConstraints({advanced:[{torch:torchOn}]})}catch(e){toast('Light not supported on this phone','warn')}};
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&scanning)stopCam()});
+
+$('#btnScanCancel').onclick=async()=>{if(cur.items.length&&!confirm(`Discard ${cur.items.length} scanned shipment(s)?`))return;await stopCam();cur=null;goHome()};
+
+$('#btnSubmit').onclick=async()=>{
+  if(!cur||!cur.items.length)return;
+  const btn=$('#btnSubmit');btn.disabled=true;btn.textContent='Saving…';
+  await stopCam();
+  const items=cur.items.slice().reverse();
+  const payload={action:'submit',batchId:cur.batchId,store:cfg.store,guard:cfg.guard,riderName:cur.name,riderMobile:cur.mobile,inTime:cur.inTime,items:items.map(i=>({code:i.code,orderId:i.orderId}))};
+  const inD=new Date(cur.inTime);
+  const batch={batchId:cur.batchId,riderName:cur.name,riderMobile:cur.mobile,in:tStr(inD),date:dStr(inD),count:items.length,outTime:'',repeats:0,synced:false,codes:items.map(i=>i.code)};
+  localBatches.push(batch);
+  const r=riders.find(x=>x.m===cur.mobile);if(r){r.v=(r.v||0)+1;r.last=dStr()+' '+tStr()}
+  let res={ok:false,repeats:[]};
+  try{
+    if(queue.length)throw 0;               // keep order: older entries go first
+    const j=await api(payload);batch.synced=true;batch.repeats=(j.repeats||[]).length;res={ok:true,repeats:j.repeats||[]};
+  }catch(e){queue.push(payload);res.err=e&&e.server?e.message:''}
+  save();
+  const done=cur;cur=null;
+  showDone(done,batch,res);
+  if(res.ok)loadToday();
+};
+
+function showDone(c,b,res){
+  $('#dTitle').textContent=`${b.count} shipment${b.count>1?'s':''} saved`;
+  $('#dSub').textContent=`${c.name} · ${c.mobile} · in ${b.in}`;
+  let h='';
+  if(!res.ok)h+=`<div class="notice warn">${res.err?esc(res.err)+'. ':''}Saved on this phone. It will go to the sheet automatically when internet is back.</div>`;
+  if(res.repeats.length)h+=`<div class="notice bad"><b>${res.repeats.length} already in the register:</b><br>${res.repeats.map(r=>`<span class="code">${esc(r.code)}</span> — ${esc(r.rider)}, ${esc(r.date)} ${esc(r.time)}`).join('<br>')}</div>`;
+  $('#dNotes').innerHTML=h;
+  renderSync();show('done');
+}
+$('#btnNext').onclick=()=>$('#btnNew').click();
+$('#btnHome').onclick=goHome;
+
+/* ---------- boot ---------- */
+function tick(){$('#clock').textContent=tStr()}
+tick();setInterval(tick,15000);
+// keep only last 3 days of local batches
+(function prune(){const keep=new Set([0,1,2].map(d=>dStr(new Date(Date.now()-d*864e5))));localBatches=localBatches.filter(b=>keep.has(b.date));save()})();
+window.addEventListener('online',flush);
+setInterval(()=>{if(cfg){if(queue.length)flush();else if(!$('[data-view="home"]').hidden)loadToday()}},60000);
+if(!cfg){fillSetup();show('setup')}else{applyHeader();goHome();loadRiders();flush()}
+})();
+</script>
+</body>
+</html>
