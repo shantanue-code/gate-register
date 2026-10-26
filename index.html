@@ -169,7 +169,7 @@ label.f small{font-weight:400;color:var(--muted)}
   <div class="hbar">
     <div class="grow">
       <h1 id="hStore">Gate Register</h1>
-      <div class="sub"><span id="hGuard">Omni inward</span> &nbsp; <span class="sync"><i class="dot" id="syncDot"></i><span id="syncTxt">Online</span></span></div>
+      <div class="sub"><span id="hGuard">Omni inward</span> &nbsp; <button class="sync" id="btnSync" style="background:none;border:0;padding:0;color:inherit;cursor:pointer"><i class="dot" id="syncDot"></i><span id="syncTxt">Online</span></button></div>
     </div>
     <div class="clock" id="clock">--:--</div>
     <button class="iconbtn" id="btnSettings" aria-label="Settings">
@@ -304,7 +304,7 @@ let queue=LS.get('gr_queue',[]);            // pending API calls
 let localBatches=LS.get('gr_batches',[]);   // batches saved from this phone
 let outs=LS.get('gr_outs',{});              // batchId -> out time marked on this phone
 let serverBatches=[];
-let cur=null, scanner=null, scanning=false, torchOn=false, wake=null, lastScan={code:'',t:0}, netState='ok';
+let cur=null, scanner=null, scanning=false, torchOn=false, wake=null, netState='ok', lastErr='';
 
 /* ---------- utils ---------- */
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -324,25 +324,35 @@ let actx;function buzz(kind){
 
 /* ---------- API ---------- */
 async function api(payload,timeout){
-  const ctl=new AbortController();const tm=setTimeout(()=>ctl.abort(),timeout||20000);
+  const ctl=new AbortController();const tm=setTimeout(()=>ctl.abort(),timeout||45000);
   try{
     const r=await fetch(cfg.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({},payload,{key:cfg.key})),signal:ctl.signal});
     const j=await r.json();
     if(!j.ok){const e=new Error(j.error||'Server error');e.server=true;throw e}
-    netState='ok';return j;
-  }catch(e){netState=e.server?'err':'off';throw e}
+    netState='ok';lastErr='';return j;
+  }catch(e){
+    netState=e.server?'err':'off';
+    lastErr=e.server?('Sheet replied: '+e.message):e.name==='AbortError'?'The sheet took too long to reply (slow internet).'
+      :'Could not reach the sheet. Either there is no internet, or the Apps Script deployment is not set to "Anyone".';
+    throw e}
   finally{clearTimeout(tm);renderSync()}
 }
 let flushing=false;
 async function flush(){
   if(flushing||!queue.length||!cfg)return;flushing=true;
   try{
-    while(queue.length){
-      const item=queue[0];await api(item);
-      if(item.action==='submit'){const b=localBatches.find(x=>x.batchId===item.batchId);if(b)b.synced=true}
-      queue.shift();save();
+    // send every waiting entry; a bad entry no longer blocks the ones behind it
+    for(const item of queue.slice()){
+      try{
+        await api(item);
+        if(item.action==='submit'){const b=localBatches.find(x=>x.batchId===item.batchId);if(b)b.synced=true}
+        queue=queue.filter(q=>q!==item);save();
+      }catch(e){
+        if(!e.server)break;                 // no internet / no access: stop, retry later
+        item.tries=(item.tries||0)+1;item.err=e.message;save();
+      }
     }
-  }catch(e){}finally{flushing=false;renderSync();renderHome()}
+  }catch(e){}finally{flushing=false;renderSync();renderHome();if(!queue.length)loadToday()}
 }
 function renderSync(){
   const dot=$('#syncDot'),txt=$('#syncTxt');
@@ -352,6 +362,13 @@ function renderSync(){
   else{dot.className='dot';txt.textContent='Synced'}
 }
 
+$('#btnSync').onclick=async()=>{
+  if(!cfg)return;
+  if(!queue.length&&netState==='ok'){toast('Everything is synced','ok');return}
+  toast('Trying to sync…');await flush();
+  if(queue.length||netState!=='ok')alert((queue.length?queue.length+' entr'+(queue.length>1?'ies':'y')+' waiting.\n\n':'')+(lastErr||'Unknown problem'));
+  else toast('Synced to sheet','ok');
+};
 /* ---------- setup ---------- */
 function fillSetup(){
   const sel=$('#sStore');sel.innerHTML=STORES.map(s=>`<option>${s}</option>`).join('')+'<option value="__other">Other…</option>';
@@ -417,11 +434,11 @@ async function markOut(id){
   if(!confirm(`Mark ${b?b.riderName:'rider'} as out now?`))return;
   outs[id]=tStr();save();renderHome();
   const p={action:'out',batchId:id,outTime:Date.now()};
-  try{if(queue.length)throw 0;await api(p);toast('Marked out','ok')}catch(e){queue.push(p);save();renderSync();toast('Saved on phone, will sync','warn')}
+  try{await api(p);toast('Marked out','ok')}catch(e){queue.push(p);save();renderSync();toast('Saved on phone, will sync','warn')}
 }
 async function loadToday(){try{const j=await api({action:'today',store:cfg.store});serverBatches=j.batches||[]}catch(e){}renderHome()}
 async function loadRiders(){try{const j=await api({action:'riders'});const m=new Map(riders.map(r=>[r.m,r]));(j.riders||[]).forEach(r=>m.set(r.m,Object.assign(m.get(r.m)||{},r)));riders=[...m.values()];save()}catch(e){}}
-function goHome(){show('home');renderHome();renderSync();if(!queue.length)loadToday()}
+function goHome(){show('home');renderHome();renderSync();if(queue.length)flush();else loadToday()}
 
 $('#btnFind').onclick=async()=>{
   const q=$('#q').value.trim();if(q.length<3)return toast('Type at least 3 characters','warn');
@@ -561,7 +578,7 @@ $('#btnCam').onclick=()=>scanning?stopCam():startCam();
 $('#btnTorch').onclick=async()=>{try{torchOn=!torchOn;await applyC({torch:torchOn})}catch(e){toast('Light not supported on this phone','warn')}};
 $('#btnZoom').onclick=async()=>{const c=caps();if(!c.zoom)return;const lv=[1,1.5,2,2.5].filter(z=>z<=c.zoom.max);zoomLv=lv[(lv.indexOf(zoomLv)+1)%lv.length];
   try{await applyC({zoom:Math.max(zoomLv,c.zoom.min||1)});$('#btnZoom').textContent='Zoom '+zoomLv+'×'}catch(e){}};
-document.addEventListener('visibilitychange',()=>{if(document.hidden&&scanning)stopCam()});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&scanning)stopCam();if(!document.hidden&&cfg&&queue.length)flush()});
 
 $('#btnScanCancel').onclick=async()=>{if(cur.items.length&&!confirm(`Discard ${cur.items.length} scanned shipment(s)?`))return;await stopCam();cur=null;goHome()};
 
@@ -577,10 +594,10 @@ $('#btnSubmit').onclick=async()=>{
   const r=riders.find(x=>x.m===cur.mobile);if(r){r.v=(r.v||0)+1;r.last=dStr()+' '+tStr()}
   let res={ok:false,repeats:[]};
   try{
-    if(queue.length)throw 0;               // keep order: older entries go first
     const j=await api(payload);batch.synced=true;batch.repeats=(j.repeats||[]).length;res={ok:true,repeats:j.repeats||[]};
   }catch(e){queue.push(payload);res.err=e&&e.server?e.message:''}
   save();
+  if(queue.length)flush();
   const done=cur;cur=null;
   showDone(done,batch,res);
   if(res.ok)loadToday();
@@ -590,7 +607,7 @@ function showDone(c,b,res){
   $('#dTitle').textContent=`${b.count} shipment${b.count>1?'s':''} saved`;
   $('#dSub').textContent=`${c.name} · ${c.mobile} · in ${b.in}`;
   let h='';
-  if(!res.ok)h+=`<div class="notice warn">${res.err?esc(res.err)+'. ':''}Saved on this phone. It will go to the sheet automatically when internet is back.</div>`;
+  if(!res.ok)h+=`<div class="notice warn">Saved on this phone, not yet in the sheet.<br><small>${esc(lastErr)}</small></div>`;
   if(res.repeats.length)h+=`<div class="notice bad"><b>${res.repeats.length} already in the register:</b><br>${res.repeats.map(r=>`<span class="code">${esc(r.code)}</span> — ${esc(r.rider)}, ${esc(r.date)} ${esc(r.time)}`).join('<br>')}</div>`;
   $('#dNotes').innerHTML=h;
   renderSync();show('done');
@@ -604,7 +621,8 @@ tick();setInterval(tick,15000);
 // keep only last 3 days of local batches
 (function prune(){const keep=new Set([0,1,2].map(d=>dStr(new Date(Date.now()-d*864e5))));localBatches=localBatches.filter(b=>keep.has(b.date));save()})();
 window.addEventListener('online',flush);
-setInterval(()=>{if(cfg){if(queue.length)flush();else if(!$('[data-view="home"]').hidden)loadToday()}},60000);
+setInterval(()=>{if(cfg&&queue.length)flush()},15000);
+setInterval(()=>{if(cfg&&!queue.length&&!$('[data-view="home"]').hidden)loadToday()},60000);
 if(!cfg){fillSetup();show('setup')}else{applyHeader();goHome();loadRiders();flush()}
 })();
 </script>
